@@ -4,9 +4,18 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Description>A lightweight library for building MCP (Model Context Protocol) servers in .NET without external dependencies.</Description>
-    <Authors>Keerthi RB</Authors>
+    <PackageId>MCPServer</PackageId>
     <Version>1.0.0</Version>
+    <Authors>Keerthi RB</Authors>
+    <Description>A lightweight library for building MCP (Model Context Protocol) servers in .NET without external dependencies.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/keerukee/MCPServer</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/keerukee/MCPServer</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
 </Project>
