@@ -2,8 +2,8 @@ name: Publish to NuGet
 
 on:
   push:
-    tags:
-      - 'v*'  # Triggers only when you push a tag like v1.0.0
+    branches:
+      - main
 
 jobs:
   publish:
