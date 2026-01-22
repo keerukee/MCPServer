@@ -76,6 +76,10 @@ public class McpServerHost
     /// </summary>
     public void Run()
     {
+        // Log registered handlers to stderr (stdout is reserved for MCP protocol)
+        Console.Error.WriteLine($"[{_options.ServerName}] MCP Server v{_options.ServerVersion} started");
+        Console.Error.WriteLine($"[{_options.ServerName}] Registered: {_toolHandler.Count} tools, {_resourceHandler.Count} resources, {_resourceTemplateHandler.Count} resource templates, {_promptHandler.Count} prompts");
+
         while (true)
         {
             // Read a single line from standard input (stdin)

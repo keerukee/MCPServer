@@ -12,6 +12,11 @@ public class McpToolHandler
     // Cache of discovered tool methods for performance
     private readonly Dictionary<string, MethodInfo> _toolMethods;
 
+    /// <summary>
+    /// Gets the number of registered tools.
+    /// </summary>
+    public int Count => _toolMethods.Count;
+
     public McpToolHandler(Assembly assembly)
     {
         _toolMethods = DiscoverTools(assembly);

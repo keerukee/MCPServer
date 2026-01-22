@@ -11,6 +11,11 @@ public class McpResourceTemplateHandler
     // Cache of discovered resource template methods
     private readonly Dictionary<string, MethodInfo> _templateMethods;
 
+    /// <summary>
+    /// Gets the number of registered resource templates.
+    /// </summary>
+    public int Count => _templateMethods.Count;
+
     public McpResourceTemplateHandler(Assembly assembly)
     {
         _templateMethods = DiscoverTemplates(assembly);

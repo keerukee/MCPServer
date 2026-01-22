@@ -12,6 +12,11 @@ public class McpPromptHandler
     // Cache of discovered prompt methods
     private readonly Dictionary<string, MethodInfo> _promptMethods;
 
+    /// <summary>
+    /// Gets the number of registered prompts.
+    /// </summary>
+    public int Count => _promptMethods.Count;
+
     public McpPromptHandler(Assembly assembly)
     {
         _promptMethods = DiscoverPrompts(assembly);

@@ -12,6 +12,11 @@ public class McpResourceHandler
     // Cache of discovered resource methods
     private readonly Dictionary<string, MethodInfo> _resourceMethods;
 
+    /// <summary>
+    /// Gets the number of registered resources.
+    /// </summary>
+    public int Count => _resourceMethods.Count;
+
     public McpResourceHandler(Assembly assembly)
     {
         _resourceMethods = DiscoverResources(assembly);
