@@ -85,7 +85,14 @@ public class McpServerHost
             // Read a single line from standard input (stdin)
             string? line = Console.ReadLine();
 
-            // Skip empty or null lines to avoid parsing errors
+            // If stdin is closed (client disconnected), exit gracefully
+            if (line == null)
+            {
+                Console.Error.WriteLine($"[{_options.ServerName}] Client disconnected, shutting down");
+                break;
+            }
+
+            // Skip empty lines to avoid parsing errors
             if (string.IsNullOrEmpty(line)) continue;
 
             // Parse the incoming line as a JSON document
