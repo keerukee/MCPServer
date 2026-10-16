@@ -69,16 +69,16 @@ public class McpResourceHandler
     /// <summary>
     /// Handles a resources/read request by invoking the appropriate method.
     /// </summary>
-    public object HandleResourceRead(JsonElement paramsElement)
+    public object HandleResourceRead(JsonElement paramsElement, bool isModern = false)
     {
-        var uri = paramsElement.GetProperty("uri").GetString()!;
+        var uri = paramsElement.TryGetProperty("uri", out var uriElement) &&
+                  uriElement.ValueKind == JsonValueKind.String
+            ? uriElement.GetString()!
+            : "";
 
         if (!_resourceMethods.TryGetValue(uri, out var method))
         {
-            return new
-            {
-                contents = new[] { new { uri = uri, text = $"Resource '{uri}' not found", mimeType = "text/plain" } }
-            };
+            return CreateResourceResponse(uri, $"Resource '{uri}' not found", "text/plain", isModern);
         }
 
         try
@@ -86,18 +86,35 @@ public class McpResourceHandler
             var attr = method.GetCustomAttribute<McpResourceAttribute>()!;
             var result = method.Invoke(null, null);
 
-            return new
+            if (result is Task task)
             {
-                contents = new[] { new { uri = uri, text = result?.ToString() ?? "", mimeType = attr.MimeType } }
-            };
+                task.GetAwaiter().GetResult();
+                var taskType = task.GetType();
+                result = taskType.IsGenericType
+                    ? taskType.GetProperty("Result")?.GetValue(task)
+                    : null;
+            }
+
+            return CreateResourceResponse(uri, result?.ToString() ?? "", attr.MimeType, isModern);
         }
         catch (Exception ex)
         {
             var message = ex.InnerException?.Message ?? ex.Message;
-            return new
-            {
-                contents = new[] { new { uri = uri, text = $"Error: {message}", mimeType = "text/plain" } }
-            };
+            return CreateResourceResponse(uri, $"Error: {message}", "text/plain", isModern);
         }
     }
+
+    private static object CreateResourceResponse(string uri, string text, string mimeType, bool isModern) =>
+        isModern
+            ? new
+            {
+                resultType = "complete",
+                contents = new[] { new { uri = uri, text = text, mimeType = mimeType } },
+                ttlMs = 0,
+                cacheScope = "private"
+            }
+            : new
+            {
+                contents = new[] { new { uri = uri, text = text, mimeType = mimeType } }
+            };
 }

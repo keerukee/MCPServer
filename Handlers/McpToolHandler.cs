@@ -66,7 +66,7 @@ public class McpToolHandler
             {
                 var paramAttr = param.GetCustomAttribute<McpParameterAttribute>();
                 var description = paramAttr?.Description ?? param.Name ?? "";
-                var isRequired = paramAttr?.Required ?? true;
+                var isRequired = paramAttr?.Required ?? (!param.HasDefaultValue && Nullable.GetUnderlyingType(param.ParameterType) == null);
 
                 // Map C# types to JSON schema types
                 properties[param.Name!] = new
@@ -100,24 +100,27 @@ public class McpToolHandler
     /// <summary>
     /// Handles a tools/call request by invoking the appropriate method.
     /// </summary>
-    public object HandleToolCall(JsonElement paramsElement)
+    public object HandleToolCall(JsonElement paramsElement, bool isModern = false)
     {
-        var toolName = paramsElement.GetProperty("name").GetString()!;
+        if (!paramsElement.TryGetProperty("name", out var nameElement) ||
+            nameElement.ValueKind != JsonValueKind.String)
+        {
+            return CreateToolResponse("Error: Missing tool 'name'", isError: true, isModern);
+        }
+
+        var toolName = nameElement.GetString()!;
 
         // Check if the tool exists
         if (!_toolMethods.TryGetValue(toolName, out var method))
         {
-            return new
-            {
-                content = new[] { new { type = "text", text = $"Tool '{toolName}' not found" } },
-                isError = true
-            };
+            return CreateToolResponse($"Tool '{toolName}' not found", isError: true, isModern);
         }
 
         try
         {
             // Extract arguments from the request
-            var args = paramsElement.TryGetProperty("arguments", out var argsElement)
+            var args = paramsElement.TryGetProperty("arguments", out var argsElement) &&
+                       argsElement.ValueKind == JsonValueKind.Object
                 ? argsElement
                 : default;
 
@@ -128,8 +131,12 @@ public class McpToolHandler
             for (int i = 0; i < parameters.Length; i++)
             {
                 var param = parameters[i];
-                if (args.ValueKind != JsonValueKind.Undefined &&
-                    args.TryGetProperty(param.Name!, out var value))
+                var paramAttr = param.GetCustomAttribute<McpParameterAttribute>();
+
+                if (args.ValueKind == JsonValueKind.Object &&
+                    args.TryGetProperty(param.Name!, out var value) &&
+                    value.ValueKind != JsonValueKind.Null &&
+                    value.ValueKind != JsonValueKind.Undefined)
                 {
                     // Convert JSON value to the parameter type
                     paramValues[i] = ConvertJsonValue(value, param.ParameterType);
@@ -137,6 +144,12 @@ public class McpToolHandler
                 else if (param.HasDefaultValue)
                 {
                     paramValues[i] = param.DefaultValue;
+                }
+                else if (paramAttr?.Required == false || Nullable.GetUnderlyingType(param.ParameterType) != null)
+                {
+                    paramValues[i] = param.ParameterType.IsValueType && Nullable.GetUnderlyingType(param.ParameterType) == null
+                        ? Activator.CreateInstance(param.ParameterType)
+                        : null;
                 }
                 else
                 {
@@ -147,24 +160,40 @@ public class McpToolHandler
             // Invoke the tool method
             var result = method.Invoke(null, paramValues);
 
-            // Return MCP-compliant response
-            return new
+            // Unwrap Task / Task<T> if the tool method is async
+            if (result is Task task)
             {
-                content = new[] { new { type = "text", text = result?.ToString() ?? "" } },
-                isError = false
-            };
+                task.GetAwaiter().GetResult();
+                var taskType = task.GetType();
+                result = taskType.IsGenericType
+                    ? taskType.GetProperty("Result")?.GetValue(task)
+                    : null;
+            }
+
+            // Return MCP-compliant response
+            return CreateToolResponse(result?.ToString() ?? "", isError: false, isModern);
         }
         catch (Exception ex)
         {
             // Return error response if invocation fails
             var message = ex.InnerException?.Message ?? ex.Message;
-            return new
-            {
-                content = new[] { new { type = "text", text = $"Error: {message}" } },
-                isError = true
-            };
+            return CreateToolResponse($"Error: {message}", isError: true, isModern);
         }
     }
+
+    private static object CreateToolResponse(string text, bool isError, bool isModern) =>
+        isModern
+            ? new
+            {
+                resultType = "complete",
+                content = new[] { new { type = "text", text = text } },
+                isError = isError
+            }
+            : new
+            {
+                content = new[] { new { type = "text", text = text } },
+                isError = isError
+            };
 
     /// <summary>
     /// Maps C# types to JSON schema type strings.
@@ -190,17 +219,23 @@ public class McpToolHandler
     /// </summary>
     private static object? ConvertJsonValue(JsonElement element, Type targetType)
     {
+        if (element.ValueKind == JsonValueKind.Null || element.ValueKind == JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
         var underlyingType = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
         return underlyingType switch
         {
-            Type t when t == typeof(string) => element.GetString(),
-            Type t when t == typeof(int) => element.GetInt32(),
-            Type t when t == typeof(long) => element.GetInt64(),
-            Type t when t == typeof(double) => element.GetDouble(),
-            Type t when t == typeof(float) => element.GetSingle(),
-            Type t when t == typeof(decimal) => element.GetDecimal(),
-            Type t when t == typeof(bool) => element.GetBoolean(),
+            Type t when t == typeof(string) => element.ValueKind == JsonValueKind.String ? element.GetString() : element.GetRawText(),
+            Type t when t == typeof(int) => element.ValueKind == JsonValueKind.String ? int.Parse(element.GetString()!) : element.GetInt32(),
+            Type t when t == typeof(long) => element.ValueKind == JsonValueKind.String ? long.Parse(element.GetString()!) : element.GetInt64(),
+            Type t when t == typeof(short) => element.ValueKind == JsonValueKind.String ? short.Parse(element.GetString()!) : element.GetInt16(),
+            Type t when t == typeof(double) => element.ValueKind == JsonValueKind.String ? double.Parse(element.GetString()!) : element.GetDouble(),
+            Type t when t == typeof(float) => element.ValueKind == JsonValueKind.String ? float.Parse(element.GetString()!) : element.GetSingle(),
+            Type t when t == typeof(decimal) => element.ValueKind == JsonValueKind.String ? decimal.Parse(element.GetString()!) : element.GetDecimal(),
+            Type t when t == typeof(bool) => element.ValueKind == JsonValueKind.String ? bool.Parse(element.GetString()!) : element.GetBoolean(),
             _ => element.GetRawText()
         };
     }

@@ -82,13 +82,18 @@ public class McpPromptHandler
     /// <summary>
     /// Handles a prompts/get request by invoking the appropriate method.
     /// </summary>
-    public object HandlePromptGet(JsonElement paramsElement)
+    public object HandlePromptGet(JsonElement paramsElement, bool isModern = false)
     {
-        var promptName = paramsElement.GetProperty("name").GetString()!;
+        var promptName = paramsElement.TryGetProperty("name", out var nameElement) &&
+                         nameElement.ValueKind == JsonValueKind.String
+            ? nameElement.GetString()!
+            : "";
 
         if (!_promptMethods.TryGetValue(promptName, out var method))
         {
-            return new { description = "", messages = Array.Empty<object>() };
+            return isModern
+                ? new { resultType = "complete", description = "", messages = Array.Empty<object>() }
+                : new { description = "", messages = Array.Empty<object>() };
         }
 
         try
@@ -96,7 +101,8 @@ public class McpPromptHandler
             var attr = method.GetCustomAttribute<McpPromptAttribute>()!;
 
             // Extract arguments from the request
-            var args = paramsElement.TryGetProperty("arguments", out var argsElement)
+            var args = paramsElement.TryGetProperty("arguments", out var argsElement) &&
+                       argsElement.ValueKind == JsonValueKind.Object
                 ? argsElement
                 : default;
 
@@ -107,10 +113,14 @@ public class McpPromptHandler
             for (int i = 0; i < parameters.Length; i++)
             {
                 var param = parameters[i];
-                if (args.ValueKind != JsonValueKind.Undefined &&
-                    args.TryGetProperty(param.Name!, out var value))
+                if (args.ValueKind == JsonValueKind.Object &&
+                    args.TryGetProperty(param.Name!, out var value) &&
+                    value.ValueKind != JsonValueKind.Null &&
+                    value.ValueKind != JsonValueKind.Undefined)
                 {
-                    paramValues[i] = value.GetString();
+                    paramValues[i] = value.ValueKind == JsonValueKind.String
+                        ? value.GetString()
+                        : value.GetRawText();
                 }
                 else if (param.HasDefaultValue)
                 {
@@ -121,34 +131,37 @@ public class McpPromptHandler
             // Invoke the prompt method - expects it to return the prompt text
             var result = method.Invoke(null, paramValues);
 
-            return new
+            if (result is Task task)
             {
-                description = attr.Description,
-                messages = new[]
-                {
-                    new
-                    {
-                        role = "user",
-                        content = new { type = "text", text = result?.ToString() ?? "" }
-                    }
-                }
-            };
+                task.GetAwaiter().GetResult();
+                var taskType = task.GetType();
+                result = taskType.IsGenericType
+                    ? taskType.GetProperty("Result")?.GetValue(task)
+                    : null;
+            }
+
+            return CreatePromptResponse(attr.Description, result?.ToString() ?? "", isModern);
         }
         catch (Exception ex)
         {
             var message = ex.InnerException?.Message ?? ex.Message;
-            return new
-            {
-                description = "Error",
-                messages = new[]
-                {
-                    new
-                    {
-                        role = "user",
-                        content = new { type = "text", text = $"Error: {message}" }
-                    }
-                }
-            };
+            return CreatePromptResponse("Error", $"Error: {message}", isModern);
         }
+    }
+
+    private static object CreatePromptResponse(string description, string text, bool isModern)
+    {
+        var messages = new[]
+        {
+            new
+            {
+                role = "user",
+                content = new { type = "text", text = text }
+            }
+        };
+
+        return isModern
+            ? new { resultType = "complete", description = description, messages = messages }
+            : new { description = description, messages = messages };
     }
 }

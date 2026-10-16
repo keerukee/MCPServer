@@ -5,9 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Keerukee.MCPServer.Stdio</PackageId>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <Authors>Keerthi RB</Authors>
-    <PackageReleaseNotes>v1.0.2: Fixed server not exiting when MCP client disconnects (stdin EOF handling)</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.0.3: Added MCP 2026-07-28 server/discover support, multi-version initialize negotiation, top-level JSON-RPC 2.0 error responses, async tool/resource/prompt handlers, and UTF-8 stdio encoding</PackageReleaseNotes>
     <Description>A lightweight library for building MCP (Model Context Protocol) servers in .NET without external dependencies.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/keerukee/MCPServer</RepositoryUrl>
